@@ -127,7 +127,7 @@ neurotransmitter_types = np.unique(section['neurotransmitter'])
 # del section
 #%% look for genes from list in the data
 
-pred = [x in fullGeneList for x in adata.var.gene_symbol]
+pred = [x in shortGeneList for x in adata.var.gene_symbol]
 gene_filtered = adata.var[pred]
 del pred
 asubset = adata[:, gene_filtered.index].to_memory()
@@ -300,3 +300,20 @@ for gene in gene_filtered.gene_symbol:
 for gene in gene_filtered.gene_symbol:
     for nt in neurotransmitter_types:
         plotHippocampalGeneExpression(gene, neurotransmitter=nt, saveImage=True)
+
+#%% create figure that includes the three genes present from the short list
+# include the genes as columns and four cell types (exc, inh, astro, vascular) as rows
+pred = [x in shortGeneList for x in adata.var.gene_symbol]
+gene_filtered = adata.var[pred]
+
+asubset = adata[:, gene_filtered.index].to_memory()
+
+gf = asubset.var[asubset.var.gene_symbol == geneName]
+geneDataFrame = create_expression_dataframe(asubset_hpf, gf)
+#%% plotting
+plt.close('all')
+fig,ax = plt.subplots(4,3)
+ax[0].scatter(section_ccf['x'], section_ccf['y'], c='tab:grey', s=3, alpha=0.1)
+sc = ax[0].scatter(geneDataFrame['x'], geneDataFrame['y'], c=geneDataFrame[geneName], s=3, cmap='Reds')
+# ax.yaxis.set_inverted(True)
+ax.set_aspect('equal')
