@@ -21,61 +21,22 @@ derivatives = os.path.join('/','media','zjpeters','Expansion','traxManuscript','
 #%% Create lists of possible genes
 
 shortGeneList = ['Tnc','Itga5','Tln1','Pxn','Plaur','Itga10', 'Tsn']
-fullGeneList = ['Dram1','Fgr','Ifih1','Sp100','Map4k4','Itga5','Tnc','Tln1','Cd84','Cd33','Pxn','Ctsc','Mtmr10',
+fullGeneList = ['Tsn', 'Dram1','Fgr','Ifih1','Sp100','Map4k4','Itga5','Tnc','Tln1','Cd84','Cd33','Pxn','Ctsc','Mtmr10',
                 'Lyn','Tapbp','Il10ra','Ctsa','Slc13a3','Gpsm3','Ptbp1','Stxbp2','Efs','Arhgef1','Adam17',
                 'Pcolce2','P2ry2','Ret','Arhgap9','Ptafr','Trpv4','Tmed7','Plaur','Isg20','Mpeg1','Bach1',
-                'Sulf1','Sfrp1','Emp1','Myrf','Hpgds','Col4a5','Itga10','Gbp6', 'Tsn']
+                'Sulf1','Sfrp1','Emp1','Myrf','Hpgds','Col4a5','Itga10','Gbp6']
 #%% prepare allen brain cell atlas environment
-"""
-this code is mainly taken from:
 
-https://alleninstitute.github.io/abc_atlas_access/notebooks/merfish_tutorial_part_1.html
-"""
-# functions
-def plot_section(xx, yy, cc = None, val = None, fig_width = 8, fig_height = 8, cmap = None):
-    fig, ax = plt.subplots()
-    fig.set_size_inches(fig_width, fig_height)
-    if cmap is not None:
-        plt.scatter(xx, yy, s=0.5, c=val, marker='.', cmap=cmap)
-    elif cc is not None:
-        plt.scatter(xx, yy, s=0.5, color=cc, marker='.')
-    ax.set_ylim(11, 0)
-    ax.set_xlim(0, 11)
-    ax.axis('equal')
-    ax.set_xticks([])
-    ax.set_yticks([])
-    return fig, ax
 
 def create_expression_dataframe(ad, gf):
+    """
+    this code is taken from:
+    https://alleninstitute.github.io/abc_atlas_access/notebooks/merfish_tutorial_part_1.html
+    """
     gdata = ad[:, gf.index].to_df()
     gdata.columns = gf.gene_symbol
     joined = section.join(gdata)
     return joined
-
-def aggregate_by_metadata(df, gnames, value, sort = False):
-    grouped = df.groupby(value)[gnames].mean()
-    if sort:
-        grouped = grouped.sort_values(by=gnames[0], ascending=False)
-    return grouped
-
-def plot_heatmap(df, fig_width = 8, fig_height = 4, cmap = plt.cm.magma_r):
-
-    arr = df.to_numpy()
-
-    fig, ax = plt.subplots()
-    fig.set_size_inches(fig_width, fig_height)
-
-    im = ax.imshow(arr, cmap=cmap, aspect='auto', vmin=0, vmax=5)
-    xlabs = df.columns.values
-    ylabs = df.index.values
-
-    ax.set_xticks(range(len(xlabs)))
-    ax.set_xticklabels(xlabs)
-
-    ax.set_yticks(range(len(ylabs)))
-    res = ax.set_yticklabels(ylabs)
-    
-    return im
 
 # importing data
 dataLocation = Path('/media/zjpeters/Expansion/allenBrainCellAtlas/sourcedata/abc_atlas')
@@ -132,6 +93,18 @@ gene_filtered = adata.var[pred]
 del pred
 asubset = adata[:, gene_filtered.index].to_memory()
 del adata
+
+#%% reorder gene list so Tsn is first
+# first find index of Tsn
+tsn_idx = gene_filtered[gene_filtered['gene_symbol'] == 'Tsn'].index[0]
+gene_filtered_idxs = gene_filtered.index
+# create new list where remaining genes are in same order, but Tsn is first
+new_gene_filtered_idxs = [tsn_idx]
+for i in gene_filtered_idxs:
+    if i != tsn_idx:
+        new_gene_filtered_idxs.append(i)
+# perform reindexing of data
+gene_filtered = gene_filtered.reindex(new_gene_filtered_idxs)
 #%% load ccf registered coordinates for all cellsannotation
 
 cell = abc_cache.get_metadata_dataframe(directory='MERFISH-C57BL6J-638850', file_name='cell_metadata_with_cluster_annotation')
@@ -251,29 +224,36 @@ for i in range(len(gene_filtered.gene_symbol)):
     geneDataFrame = restrictToHPF(geneDataFrame)
     print(np.max(geneDataFrame[geneName]))
 
-#%% plotting
+#%% plotting to multiple figures
+# for a set of 25 genes, breaking it into 5 figures of 5 genes each,
+# plotted with genes along y-axis, cell types along x-axis
+
+# don't need to repeat the following line since it's run above
+section_hpf = restrictToHPF(section_ccf, hemispheres='single')
+
 plt.close('all')
 # , figsize=(8.5, 9.5)
-fig,ax = plt.subplots(4,len(gene_filtered.gene_symbol))
-section_hpf = restrictToHPF(section_ccf, hemispheres='single')
+
+fig,ax = plt.subplots(5, len(cellTypesOfInterest), figsize=(9.5, 9.5))
+figNumber = 1
+geneNumber = 0
 for i in range(len(gene_filtered.gene_symbol)):
     geneName = gene_filtered.gene_symbol[i]
     print(geneName)
     gf = asubset.var[asubset.var.gene_symbol == geneName]
     geneDataFrame = create_expression_dataframe(asubset_hpf, gf)
     geneDataFrame = restrictToHPF(geneDataFrame)
-    ax[0,i].set_title(geneName)
     # loop over the cell type groups
     for j in enumerate(cellTypesOfInterest):
+        ax[0, j[0]].set_title(j[1])
         cellTypeMask = [x in cellTypesOfInterest[j[1]] for x in geneDataFrame['class']]
-        print(j[1])
-        ax[j[0],0].set_ylabel(j[1])
+        ax[geneNumber, 0].set_ylabel(geneName, rotation='horizontal', horizontalalignment='right')
         cellTypeDataFrame = geneDataFrame[cellTypeMask]
-        ax[j[0], i].scatter(section_hpf['x'], section_hpf['y'], c='tab:grey', s=3, alpha=0.1)
-        sc = ax[j[0], i].scatter(cellTypeDataFrame['x'], cellTypeDataFrame['y'], c=cellTypeDataFrame[geneName], s=1, cmap='Reds', vmin=0, vmax=8)
-        ax[j[0], i].yaxis.set_inverted(True)
-        ax[j[0], i].set_aspect('equal')
-        ax[j[0], i].tick_params(
+        ax[geneNumber, j[0]].scatter(section_hpf['x'], section_hpf['y'], c='tab:grey', s=3, alpha=0.1)
+        sc = ax[geneNumber, j[0]].scatter(cellTypeDataFrame['x'], cellTypeDataFrame['y'], c=cellTypeDataFrame[geneName], s=1, cmap='Reds', vmin=0, vmax=8)
+        ax[geneNumber, j[0]].yaxis.set_inverted(True)
+        ax[geneNumber, j[0]].set_aspect('equal')
+        ax[geneNumber, j[0]].tick_params(
             axis='both',          # changes apply to the x-axis
             which='both',      # both major and minor ticks are affected
             bottom=False,      # ticks along the bottom edge are off
@@ -281,110 +261,14 @@ for i in range(len(gene_filtered.gene_symbol)):
             labelbottom=False,
             left=False,
             labelleft=False)
-
-cbar_ax = fig.add_axes([0.9, 0.15, 0.02, 0.7])
-fig.colorbar(sc, cax=cbar_ax, fraction=0.015, pad=0.04)
-plt.show()
-
-#%% save figures
-plt.savefig(os.path.join(derivatives, 'threeGeneFourCellTypes.png'), bbox_inches='tight', dpi=300)
-plt.savefig(os.path.join(derivatives, 'threeGeneFourCellTypes.svg'), bbox_inches='tight')
-#%% turn above code into a function
-
-def plotHippocampalGeneExpression(
-        geneName, cellType=None, neurotransmitter=None, 
-        singleHemisphere=True, saveImage=False, filetype='png'):
-    """
-    Plots the expression of a given gene contained in the asubset variable 
-    created above.
-    
-    Parameters
-    ----------
-    geneName : str
-        Gene name for a gene contained in the asubset variable generated above.
-    cellType : str, optional
-        One of the cell type contained in the 'class' column of the data. 
-        The default is None.
-    neurotransmitter : str, optional
-        One of the neurotransmitters contained in the 'neurotransmitter column
-        of the data. The default is None.
-    singleHemisphere : bool, optional
-        Whether to display only the left hemisphere or both hemispheres of the
-        hippocampus. The default is True.
-    saveImage : bool, optional
-        Whether to save image to default derivatives. The default is False.
-
-    Returns
-    -------
-    None.
-
-    """
-    gf = asubset.var[asubset.var.gene_symbol == geneName]
-    geneDataFrame = create_expression_dataframe(asubset_hpf, gf)
-    if cellType != None:
-        geneDataFrame = geneDataFrame[geneDataFrame['class'] == cellType]
-    if neurotransmitter != None:
-        geneDataFrame = geneDataFrame[geneDataFrame['neurotransmitter'] == neurotransmitter]
-    bgGrey = np.empty_like(section_ccf['x'])
-    bgGrey[:] = 0.5
-    if np.any(geneDataFrame[geneName]):
-        fig, ax = plt.subplots()
-        ax.scatter(section_ccf['x'], section_ccf['y'], c='tab:grey', s=3, alpha=0.1)
-        sc = ax.scatter(geneDataFrame['x'], geneDataFrame['y'], c=geneDataFrame[geneName], s=3, cmap='Reds')
-        # ax.yaxis.set_inverted(True)
-        ax.set_aspect('equal')
-        # these x and y limits restrict plot to single hemisphere of hippocampus
-        if singleHemisphere == True:
-            ax.set_ylim(2.8, 5.0)
-            ax.set_xlim(2.0, 5.0)
-            plt.colorbar(sc,fraction=0.03, pad=0.04)
-        else:
-            ax.set_ylim(2.8, 5.0)
-            ax.set_xlim(2.0, 9.0)
-            plt.colorbar(sc,fraction=0.015, pad=0.04)
-        ax.yaxis.set_inverted(True)
-        plt.axis('off')
-        if cellType  == None and neurotransmitter == None:
-            plt.title(f'Expression of {geneName} in the Hippocampal formation')
-            savePath = os.path.join(derivatives, filetype, 'hippocampalFormation',f'{geneName}_expression_in_Hippocampal_formation.{filetype}')
-        elif cellType != None and neurotransmitter == None:
-            plt.title(f'Expression of {geneName} in {cellType} in the Hippocampal formation')
-            savePath = os.path.join(derivatives, filetype, 'cellTypes', f'{cellType}', f'{geneName}_expression_in_{cellType}_in_Hippocampal_formation.{filetype}')
-        elif cellType == None and neurotransmitter != None:
-            plt.title(f'Expression of {geneName} in {neurotransmitter} in the Hippocampal formation')
-            savePath = os.path.join(derivatives, filetype, 'neurotransmitters', f'{geneName}_expression_in_{neurotransmitter}_Hippocampal_formation.{filetype}')
-        elif cellType != None and neurotransmitter != None:
-            plt.title(f'Expression of {geneName} in {cellType} and {neurotransmitter} in the Hippocampal formation')
-            savePath = os.path.join(derivatives, filetype, f'{geneName}_expression_in_{cellType}_in_{neurotransmitter}_in_Hippocampal_formation.{filetype}')
+    if geneNumber == 4:
+        cbar_ax = fig.add_axes([0.9, 0.15, 0.02, 0.7])
+        fig.colorbar(sc, cax=cbar_ax, fraction=0.015, pad=0.04)
         plt.show()
-        if saveImage==True:
-            plt.savefig(savePath, bbox_inches='tight', dpi=300)
-            plt.close()
+        plt.savefig(os.path.join(derivatives, f'threeGeneFourCellTypes_vertical_{figNumber}.png'), bbox_inches='tight', dpi=300)
+        fig,ax = plt.subplots(5, len(cellTypesOfInterest), figsize=(9.5, 9.5))
+        geneNumber = 0
+        figNumber +=1
     else:
-        if cellType  == None and neurotransmitter == None:
-            print(f'No cells expressing {gene} in Hippocampal formation')
-        elif cellType != None and neurotransmitter == None:
-            print(f'No cells expressing {gene} in {cellType} in Hippocampal formation')
-        elif cellType == None and neurotransmitter != None:
-            print(f'No cells expressing {gene} in {neurotransmitter} in Hippocampal formation')
-        elif cellType != None and neurotransmitter != None:
-            print(f'No cells expressing {gene} in {cellType} in {neurotransmitter} in Hippocampal formation')
-# plotHippocampalGeneExpression('Tnc', cellType='30 Astro-Epen', singleHemisphere=True, saveImage=True, filetype='png')
-
-#%% plot each of the genes in each of the hippocampal formation
-
-for gene in gene_filtered.gene_symbol:
-    plotHippocampalGeneExpression(gene, saveImage=True)
-
-#%% plot each of the genes in each of the cell types
-
-for gene in gene_filtered.gene_symbol:
-    for classType in classTypes:
-        plotHippocampalGeneExpression(gene, cellType=classType, saveImage=True)
-
-#%% plot each of the genes in each of the neurotransmitters
-
-for gene in gene_filtered.gene_symbol:
-    for nt in neurotransmitter_types:
-        plotHippocampalGeneExpression(gene, neurotransmitter=nt, saveImage=True)
+        geneNumber += 1
 
